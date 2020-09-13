@@ -2,8 +2,8 @@ import tensorflow as tf
 
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt
-from keras_adabound import AdaBound
 
+import tensorflow_addons as tfa
 
 (train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()
 
@@ -36,10 +36,12 @@ model.add(layers.Flatten())
 model.add(layers.Dense(64, activation="relu"))
 model.add(layers.Dense(10))
 model.summary()
-# optimizer = tf.keras.optimizers.Adam()
-optimizer = AdaBound(lr=1e-3, final_lr=0.1)
+
+radam = tfa.optimizers.RectifiedAdam()
+ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
+
 model.compile(
-    optimizer=optimizer, loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics=["accuracy"]
+    optimizer=ranger, loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics=["accuracy"]
 )
 
 history = model.fit(train_images, train_labels, epochs=10, validation_data=(test_images, test_labels))
