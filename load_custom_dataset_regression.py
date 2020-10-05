@@ -207,11 +207,11 @@ def adapt_efficient_net():
 
     # Compile
     model = keras.Model(inputs, outputs, name="EfficientNet")
-    optimizer = keras.optimizers.Adam(learning_rate=5e-2)
+    # optimizer = keras.optimizers.Adam(learning_rate=3e-2)
     #! does not learn at the moment
-    radam = tfa.optimizers.RectifiedAdam(learning_rate=5)
+    radam = tfa.optimizers.RectifiedAdam(learning_rate=0.5)  # error ~180 000
     ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
-    # optimizer = ranger
+    optimizer = ranger
     model.compile(optimizer=optimizer, loss="mean_absolute_error", metrics=[MeanAbsoluteError()])
     return model
 
@@ -245,6 +245,9 @@ def run():
     # TODO add early stoppng
     # run_small_cnn("small_cnn", train_generator, validation_generator, test_generator)
     # TODO add more naming options for learning rate etc for TB
+    # TODO redo eff net function code to be similar to run small cnn function
+    # TODO add function for mean average model
+    # TODO if mean error is really low -> for loop and try 5 different LR's with early stoppiing -> Goal is to get good results after ~10-15 Epochs
     run_efficient_net("eff", train_generator, validation_generator, test_generator)
 
     # tensorboard --logdir logs/scalars
