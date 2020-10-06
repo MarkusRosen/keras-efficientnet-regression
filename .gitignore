@@ -6,7 +6,10 @@ __pycache__/
 # C extensions
 *.so
 logs
+efficientnetb0_notop.h5
 data
+noisy_student_efficientnet-b0
+noisy_student_efficientnet-b0.tar.gz
 # Distribution / packaging
 .Python
 build/

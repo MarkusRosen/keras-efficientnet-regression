@@ -1,24 +1,18 @@
-from typing import Iterator
-
-
+from typing import Iterator, List, Union, Tuple
+from datetime import datetime
 import pandas as pd
-
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 
-from tensorflow.keras import layers, models
-from tensorflow.python.keras.callbacks import TensorBoard
-
-
-import tensorflow_addons as tfa
-from tensorflow.keras.losses import MeanAbsoluteError
-from datetime import datetime
 from tensorflow import keras
-from typing import Tuple
+import tensorflow_addons as tfa
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras import layers, models, Model
+from tensorflow.python.keras.callbacks import TensorBoard, EarlyStopping
+from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageError
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers.experimental import preprocessing
 from tensorflow.keras.applications import EfficientNetB0
+from tensorflow.keras.utils import plot_model
 
 
 def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame):
@@ -54,6 +48,19 @@ def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame
     plt.show()
 
 
+def mean_baseline(train, val):
+    y_hat = train["price"].mean()
+    val["y_hat"] = y_hat
+    mae = MeanAbsoluteError()
+    mape = MeanAbsolutePercentageError()
+    print("================================")
+    print(mae(val["price"], val["y_hat"]).numpy())
+    print(mape(val["price"], val["y_hat"]).numpy())
+    print("================================")
+    print("================================")
+    print("================================")
+
+
 def create_generators(df: pd.DataFrame) -> Tuple[Iterator, Iterator, Iterator]:
     """[summary]
 
@@ -86,8 +93,10 @@ def create_generators(df: pd.DataFrame) -> Tuple[Iterator, Iterator, Iterator]:
 
     # TODO: think about actually using the test data later?
 
-    train, test = train_test_split(df, test_size=0.2, random_state=1)
-    train, val = train_test_split(train, test_size=0.25, random_state=1)
+    train, val = train_test_split(df, test_size=0.2, random_state=1)
+    train, test = train_test_split(train, test_size=0.125, random_state=1)
+
+    mean_baseline(train, val)
     print(train.shape)  # type: ignore
     print(val.shape)  # type: ignore
     print(test.shape)  # type: ignore
@@ -121,6 +130,22 @@ def create_generators(df: pd.DataFrame) -> Tuple[Iterator, Iterator, Iterator]:
     return train_generator, validation_generator, test_generator
 
 
+def get_callbacks(model_name: str) -> List[Union[TensorBoard, EarlyStopping]]:
+    logdir = "logs/scalars/" + model_name + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = TensorBoard(log_dir=logdir)
+
+    early_stopping_callback = EarlyStopping(
+        monitor="val_mean_absolute_percentage_error",
+        min_delta=1,
+        patience=10,
+        verbose=2,
+        mode="min",
+        baseline=None,
+        restore_best_weights=True,
+    )
+    return [tensorboard_callback, early_stopping_callback]
+
+
 def small_cnn() -> Sequential:
     """[summary]
 
@@ -143,8 +168,10 @@ def small_cnn() -> Sequential:
     return model
 
 
-def run_small_cnn(
+def run_model(
     model_name: str,
+    model_function: Model,
+    lr: float,
     train_generator: Iterator,
     validation_generator: Iterator,
     test_generator: Iterator,
@@ -155,6 +182,10 @@ def run_small_cnn(
     ----------
     model_name : str
         [description]
+    model_function : Model
+        [description]
+    lr : float
+        [description]
     train_generator : Iterator
         [description]
     validation_generator : Iterator
@@ -162,95 +193,89 @@ def run_small_cnn(
     test_generator : Iterator
         [description]
     """
-    logdir = "logs/scalars/" + model_name + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
-    tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
 
-    model = small_cnn()
+    callbacks = get_callbacks(model_name)
+    model = model_function
     model.summary()
+    plot_model(model, to_file=model_name + ".jpg", show_shapes=True)
 
-    radam = tfa.optimizers.RectifiedAdam(learning_rate=0.01)
+    radam = tfa.optimizers.RectifiedAdam(learning_rate=lr)
     ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
     optimizer = ranger
 
-    model.compile(optimizer=optimizer, loss="mean_absolute_error", metrics=[MeanAbsoluteError()])
+    model.compile(
+        optimizer=optimizer, loss="mean_absolute_error", metrics=[MeanAbsoluteError(), MeanAbsolutePercentageError()]
+    )
     history = model.fit(
         train_generator,
-        epochs=5,
+        epochs=100,
         validation_data=validation_generator,
-        callbacks=[tensorboard_callback],
+        callbacks=callbacks,
         workers=6,
     )
-    print(history.history)
+    # print(history.history)
     model.evaluate(
         test_generator,
-        callbacks=[tensorboard_callback],
+        callbacks=callbacks,
     )
 
 
-def adapt_efficient_net():
+def adapt_efficient_net() -> Model:
     inputs = layers.Input(shape=(224, 224, 3))
-    #! problematic
-    # x = img_augmentation(inputs)
 
-    model = EfficientNetB0(include_top=False, input_tensor=inputs, weights="imagenet")
-
+    model = EfficientNetB0(include_top=False, input_tensor=inputs, weights="efficientnetb0_notop.h5")
     # Freeze the pretrained weights
     model.trainable = False
 
     # Rebuild top
     x = layers.GlobalAveragePooling2D(name="avg_pool")(model.output)
     x = layers.BatchNormalization()(x)
-
-    top_dropout_rate = 0.2
+    top_dropout_rate = 0.4  # 0.2
     x = layers.Dropout(top_dropout_rate, name="top_dropout")(x)
     outputs = layers.Dense(1, name="pred")(x)
 
     # Compile
     model = keras.Model(inputs, outputs, name="EfficientNet")
-    # optimizer = keras.optimizers.Adam(learning_rate=3e-2)
-    #! does not learn at the moment
-    radam = tfa.optimizers.RectifiedAdam(learning_rate=0.5)  # error ~180 000
-    ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
-    optimizer = ranger
-    model.compile(optimizer=optimizer, loss="mean_absolute_error", metrics=[MeanAbsoluteError()])
+
     return model
-
-
-def run_efficient_net(model_name, train_generator, validation_generator, test_generator):
-    model = adapt_efficient_net()
-    model.fit(
-        train_generator,
-        epochs=100,
-        validation_data=validation_generator,
-        # callbacks=[tensorboard_callback],
-        workers=6,
-    )
 
 
 def run():
 
     df = pd.read_pickle("./data/df.pkl")
     df["image_location"] = "./data/processed_images/" + df["zpid"] + ".png"
-    # df = df.iloc[0:1000]
+    # df = df.iloc[0:2000]
 
     train_generator, validation_generator, test_generator = create_generators(df)
 
-    # Larger variants of EfficientNet do not guarantee improved performance, especially for tasks with less data or fewer classes. In such a case, the larger variant of EfficientNet chosen, the harder it is to tune hyperparameters.
-    # TODO: use small variant of EfficientNet
-    # TODO: reprogram efficient net example
-    # https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/
-    # TODO: try ranger as optimizer in keras example
-    # TODO: change code to regression and custom dataset
-    # TODO: use latest weights https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/#using-the-latest-efficientnet-weights
-    # TODO add early stoppng
-    # run_small_cnn("small_cnn", train_generator, validation_generator, test_generator)
-    # TODO add more naming options for learning rate etc for TB
-    # TODO redo eff net function code to be similar to run small cnn function
-    # TODO add function for mean average model
-    # TODO if mean error is really low -> for loop and try 5 different LR's with early stoppiing -> Goal is to get good results after ~10-15 Epochs
-    run_efficient_net("eff", train_generator, validation_generator, test_generator)
+    run_model(
+        model_name="small_cnn",
+        model_function=small_cnn(),
+        lr=0.001,
+        train_generator=train_generator,
+        validation_generator=validation_generator,
+        test_generator=test_generator,
+    )
 
+    run_model(
+        model_name="eff_net",
+        model_function=adapt_efficient_net(),
+        lr=0.5,
+        train_generator=train_generator,
+        validation_generator=validation_generator,
+        test_generator=test_generator,
+    )
+
+    # wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/noisystudent/noisy_student_efficientnet-b0.tar.gz
+    # tar -xf noisy_student_efficientnet-b0.tar.gz
+    # python efficientnet_weight_update_util.py --model b0 --notop --ckpt noisy_student_efficientnet-b0/model.ckpt --o efficientnetb0_notop.h5
     # tensorboard --logdir logs/scalars
+
+    # mean baselines 188311.890625 28.71662139892578
+    # val error small 61s 1s/step - loss: 184070.1875 - mean_absolute_error: 184073.7188 - mean_absolute_percentage_error: 25.3885 - val_loss: 182803.8438 - val_mean_absolute_error: 180425.0000 - val_mean_absolute_percentage_error: 27.3221
+    # val error eff netEpoch 4/100 60/6066s 1s/step - loss: 273727.2812 - mean_absolute_error: 274309.0312 - mean_absolute_percentage_error: 34.1479 - val_loss: 183513.7344 - val_mean_absolute_error: 181217.1719 - val_mean_absolute_percentage_error: 24.0258
+    # Test error small - loss: 184779.7656 - mean_absolute_error: 183014.6562 - mean_absolute_percentage_error: 26.9627 # epoch 17, 17m30s
+    # Test error eff net 656ms/step - loss: 183692.4531 - mean_absolute_error: 185714.2031 - mean_absolute_percentage_error: 24.1210 epoch 4, 3m40s
 
 
 if __name__ == "__main__":
