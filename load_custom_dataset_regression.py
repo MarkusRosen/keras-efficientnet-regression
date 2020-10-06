@@ -1,14 +1,15 @@
-from typing import Iterator, List, Union, Tuple
+from typing import Iterator, List, Union, Tuple, Dict
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 
 from tensorflow import keras
 import tensorflow_addons as tfa
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras import layers, models, Model
-from tensorflow.python.keras.callbacks import TensorBoard, EarlyStopping
+from tensorflow.python.keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
 from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageError
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.applications import EfficientNetB0
@@ -26,7 +27,7 @@ def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame
         [description]
     """
     # super hacky way of creating a small dataframe with one image
-    series = df.iloc[1]
+    series = df.iloc[2]
 
     df_augmentation_visualization = pd.concat([series, series], axis=1).transpose()
 
@@ -46,22 +47,40 @@ def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame
         img = img[0, :, :, :]
         plt.imshow(img)
     plt.show()
+    plt.close()
 
 
-def mean_baseline(train, val):
+def get_mean_baseline(train, val):
     y_hat = train["price"].mean()
     val["y_hat"] = y_hat
     mae = MeanAbsoluteError()
+    mae = mae(val["price"], val["y_hat"]).numpy()
     mape = MeanAbsolutePercentageError()
+    mape = mape(val["price"], val["y_hat"]).numpy()
     print("================================")
-    print(mae(val["price"], val["y_hat"]).numpy())
-    print(mape(val["price"], val["y_hat"]).numpy())
+    print(mae)
+    print(mape)
     print("================================")
     print("================================")
     print("================================")
+    return mape
 
 
-def create_generators(df: pd.DataFrame) -> Tuple[Iterator, Iterator, Iterator]:
+def split_data(df):
+    train, val = train_test_split(df, test_size=0.2, random_state=1)
+    train, test = train_test_split(train, test_size=0.125, random_state=1)
+
+    print(train.shape)  # type: ignore
+    print(val.shape)  # type: ignore
+    print(test.shape)  # type: ignore
+
+    print(train.describe())  # type: ignore
+    return train, val, test
+
+
+def create_generators(
+    df: pd.DataFrame, train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame
+) -> Tuple[Iterator, Iterator, Iterator]:
     """[summary]
 
     Parameters
@@ -91,17 +110,6 @@ def create_generators(df: pd.DataFrame) -> Tuple[Iterator, Iterator, Iterator]:
     # visualize image augmentations
     # visualize_augmentations(train_generator, df)
 
-    # TODO: think about actually using the test data later?
-
-    train, val = train_test_split(df, test_size=0.2, random_state=1)
-    train, test = train_test_split(train, test_size=0.125, random_state=1)
-
-    mean_baseline(train, val)
-    print(train.shape)  # type: ignore
-    print(val.shape)  # type: ignore
-    print(test.shape)  # type: ignore
-
-    print(train.describe())  # type: ignore
     train_generator = train_generator.flow_from_dataframe(
         dataframe=train,
         x_col="image_location",
@@ -130,7 +138,19 @@ def create_generators(df: pd.DataFrame) -> Tuple[Iterator, Iterator, Iterator]:
     return train_generator, validation_generator, test_generator
 
 
-def get_callbacks(model_name: str) -> List[Union[TensorBoard, EarlyStopping]]:
+def get_callbacks(model_name: str) -> List[Union[TensorBoard, EarlyStopping, ModelCheckpoint]]:
+    """[summary]
+
+    Parameters
+    ----------
+    model_name : str
+        [description]
+
+    Returns
+    -------
+    List[Union[TensorBoard, EarlyStopping, ModelCheckpoint]]
+        [description]
+    """
     logdir = "logs/scalars/" + model_name + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
     tensorboard_callback = TensorBoard(log_dir=logdir)
 
@@ -143,7 +163,16 @@ def get_callbacks(model_name: str) -> List[Union[TensorBoard, EarlyStopping]]:
         baseline=None,
         restore_best_weights=True,
     )
-    return [tensorboard_callback, early_stopping_callback]
+
+    model_checkpoint_callback = ModelCheckpoint(
+        "./data/models/" + model_name,
+        monitor="val_mean_absolute_percentage_error",
+        verbose=0,
+        save_best_only=True,
+        mode="min",
+        save_freq="epoch",
+    )  # saving eff_net takes quite a bit of time
+    return [tensorboard_callback, early_stopping_callback]  # , model_checkpoint_callback
 
 
 def small_cnn() -> Sequential:
@@ -175,7 +204,7 @@ def run_model(
     train_generator: Iterator,
     validation_generator: Iterator,
     test_generator: Iterator,
-):
+) -> Dict:
     """[summary]
 
     Parameters
@@ -213,11 +242,12 @@ def run_model(
         callbacks=callbacks,
         workers=6,
     )
-    # print(history.history)
+
     model.evaluate(
         test_generator,
         callbacks=callbacks,
     )
+    return history
 
 
 def adapt_efficient_net() -> Model:
@@ -230,7 +260,7 @@ def adapt_efficient_net() -> Model:
     # Rebuild top
     x = layers.GlobalAveragePooling2D(name="avg_pool")(model.output)
     x = layers.BatchNormalization()(x)
-    top_dropout_rate = 0.4  # 0.2
+    top_dropout_rate = 0.4
     x = layers.Dropout(top_dropout_rate, name="top_dropout")(x)
     outputs = layers.Dense(1, name="pred")(x)
 
@@ -240,15 +270,66 @@ def adapt_efficient_net() -> Model:
     return model
 
 
+def plot_results(model_history_small_cnn, model_history_eff_net, mean_baseline):
+
+    print(model_history_small_cnn.history["mean_absolute_percentage_error"])
+    print(model_history_small_cnn.history["val_mean_absolute_percentage_error"])
+    # history_data = {
+    #    "small_cnn_train": model_history_small_cnn.history["mean_absolute_percentage_error"],
+    #    "small_cnn_val": model_history_small_cnn.history["val_mean_absolute_percentage_error"],
+    #   "eff_net_train": model_history_eff_net.history["mean_absolute_percentage_error"],
+    #   "eff_net_val": model_history_eff_net.history["val_mean_absolute_percentage_error"],
+    # }
+    dict1 = {
+        "MAPE": model_history_small_cnn.history["mean_absolute_percentage_error"],
+        "type": "training",
+        "model": "small_cnn",
+    }
+    dict2 = {
+        "MAPE": model_history_small_cnn.history["val_mean_absolute_percentage_error"],
+        "type": "validation",
+        "model": "small_cnn",
+    }
+    dict3 = {
+        "MAPE": model_history_eff_net.history["mean_absolute_percentage_error"],
+        "type": "training",
+        "model": "eff_net",
+    }
+    dict4 = {
+        "MAPE": model_history_eff_net.history["val_mean_absolute_percentage_error"],
+        "type": "validation",
+        "model": "eff_net",
+    }
+    history_data = [dict1, dict2, dict3, dict4]
+    s1 = pd.DataFrame(dict1)
+    s2 = pd.DataFrame(dict2)
+    s3 = pd.DataFrame(dict3)
+    s4 = pd.DataFrame(dict4)
+    df = pd.concat([s1, s2, s3, s4], axis=0).reset_index()
+    grid = sns.relplot(data=df, x=df["index"], y="MAPE", hue="model", col="type", kind="line", legend=False)
+    grid.set(ylim=(20, 100))
+    for ax in grid.axes.flat:
+        ax.axhline(y=mean_baseline, color="lightcoral", linestyle="dashed")
+        ax.set(xlabel="Epoch")
+    labels = ["small_cnn", "eff_net", "mean_baseline"]
+
+    plt.legend(labels=labels)
+    plt.savefig("training_validation.png")
+    plt.show()
+
+    print(df)
+
+
 def run():
 
     df = pd.read_pickle("./data/df.pkl")
     df["image_location"] = "./data/processed_images/" + df["zpid"] + ".png"
     # df = df.iloc[0:2000]
+    train, val, test = split_data(df)
+    mean_baseline = get_mean_baseline(train, val)
+    train_generator, validation_generator, test_generator = create_generators(df, train, val, test)
 
-    train_generator, validation_generator, test_generator = create_generators(df)
-
-    run_model(
+    small_cnn_history = run_model(
         model_name="small_cnn",
         model_function=small_cnn(),
         lr=0.001,
@@ -257,7 +338,7 @@ def run():
         test_generator=test_generator,
     )
 
-    run_model(
+    eff_net_history = run_model(
         model_name="eff_net",
         model_function=adapt_efficient_net(),
         lr=0.5,
@@ -265,6 +346,8 @@ def run():
         validation_generator=validation_generator,
         test_generator=test_generator,
     )
+
+    plot_results(small_cnn_history, eff_net_history, mean_baseline)
 
     # wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/noisystudent/noisy_student_efficientnet-b0.tar.gz
     # tar -xf noisy_student_efficientnet-b0.tar.gz
