@@ -277,6 +277,10 @@ def run():
     # Test error small - loss: 184779.7656 - mean_absolute_error: 183014.6562 - mean_absolute_percentage_error: 26.9627 # epoch 17, 17m30s
     # Test error eff net 656ms/step - loss: 183692.4531 - mean_absolute_error: 185714.2031 - mean_absolute_percentage_error: 24.1210 epoch 4, 3m40s
 
+    # TODO: write comments and docstrings
+    # TODO: screenshot tensorboard
+    # TODO: seaborn relplot training/validation curves of MAPE
+
 
 if __name__ == "__main__":
     run()
