@@ -1,4 +1,4 @@
-from typing import Iterator, List, Union, Tuple, Dict
+from typing import Iterator, List, Union, Tuple
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,17 +14,19 @@ from tensorflow.keras.losses import MeanAbsoluteError, MeanAbsolutePercentageErr
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.applications import EfficientNetB0
 from tensorflow.keras.utils import plot_model
+from tensorflow.keras.callbacks import History
 
 
 def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame):
-    """[summary]
+    """Visualizes the keras augmentations with matplotlib in 3x3 grid. This function is part of create_generators() and
+    can be accessed from there.
 
     Parameters
     ----------
     data_generator : Iterator
-        [description]
+        The keras data generator of your training data.
     df : pd.DataFrame
-        [description]
+        The Pandas DataFrame containing your training data.
     """
     # super hacky way of creating a small dataframe with one image
     series = df.iloc[2]
@@ -36,27 +38,42 @@ def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame
         x_col="image_location",
         y_col="price",
         class_mode="raw",
-        target_size=(224, 224),
-        batch_size=1,
+        target_size=(224, 224),  # size of the image
+        batch_size=1,  # use only one image for visualization
     )
 
     for i in range(9):
-        ax = plt.subplot(3, 3, i + 1)
-        batch = next(iterator_visualizations)
+        ax = plt.subplot(3, 3, i + 1)  # create a 3x3 grid
+        batch = next(iterator_visualizations)  # get the next image of the generator (always the same image)
         img = batch[0]  # type: ignore
-        img = img[0, :, :, :]
+        img = img[0, :, :, :]  # remove one dimension for plotting without issues
         plt.imshow(img)
     plt.show()
     plt.close()
 
 
-def get_mean_baseline(train, val):
+def get_mean_baseline(train: pd.DataFrame, val: pd.DataFrame) -> float:
+    """Calculates the mean MAE and MAPE baselines by taking the mean values of the training data as predictioni for the
+    validation target feature.
+
+    Parameters
+    ----------
+    train : pd.DataFrame
+        Pandas DataFrame containing your training data.
+    val : pd.DataFrame
+        Pandas DataFrame containing your validation data.
+
+    Returns
+    -------
+    float
+        MAPE value.
+    """
     y_hat = train["price"].mean()
     val["y_hat"] = y_hat
     mae = MeanAbsoluteError()
-    mae = mae(val["price"], val["y_hat"]).numpy()
+    mae = mae(val["price"], val["y_hat"]).numpy()  # type: ignore
     mape = MeanAbsolutePercentageError()
-    mape = mape(val["price"], val["y_hat"]).numpy()
+    mape = mape(val["price"], val["y_hat"]).numpy()  # type: ignore
 
     print(mae)
     print("mean baseline MAPE: ", mape)
@@ -64,9 +81,23 @@ def get_mean_baseline(train, val):
     return mape
 
 
-def split_data(df):
-    train, val = train_test_split(df, test_size=0.2, random_state=1)
-    train, test = train_test_split(train, test_size=0.125, random_state=1)
+def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Accepts a Pandas DataFrame and splits it into training, testing and validation data. Returns DataFrames.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Your Pandas DataFrame containing all your data.
+
+    Returns
+    -------
+    Union[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+        [description]
+    """
+    train, val = train_test_split(df, test_size=0.2, random_state=1)  # split the data with a validation size o 20%
+    train, test = train_test_split(
+        train, test_size=0.125, random_state=1
+    )  # split the data with an overall  test size of 10%
 
     print("shape train: ", train.shape)  # type: ignore
     print("shape val: ", val.shape)  # type: ignore
@@ -74,23 +105,30 @@ def split_data(df):
 
     print("Descriptive statistics of train:")
     print(train.describe())  # type: ignore
-    return train, val, test
+    return train, val, test  # type: ignore
 
 
 def create_generators(
     df: pd.DataFrame, train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame
 ) -> Tuple[Iterator, Iterator, Iterator]:
-    """[summary]
+    """Accepts four Pandas DataFrames: all your data, the training, validation and test DataFrames. Creates and returns
+    keras ImageDataGenerators. Within this function you can also visualize the augmentations of the ImageDataGenerators.
 
     Parameters
     ----------
     df : pd.DataFrame
-        [description]
+        Your Pandas DataFrame containing all your data.
+    train : pd.DataFrame
+        Your Pandas DataFrame containing your training data.
+    val : pd.DataFrame
+        Your Pandas DataFrame containing your validation data.
+    test : pd.DataFrame
+        Your Pandas DataFrame containing your testing data.
 
     Returns
     -------
     Tuple[Iterator, Iterator, Iterator]
-        [description]
+        keras ImageDataGenerators used for training, validating and testing of your models.
     """
     train_generator = ImageDataGenerator(
         rescale=1.0 / 255,
@@ -102,18 +140,20 @@ def create_generators(
         zoom_range=[0.75, 1],
         horizontal_flip=True,
         validation_split=0.2,
-    )
+    )  # create an ImageDataGenerator with multiple image augmentations
 
-    validation_generator = ImageDataGenerator(rescale=1.0 / 255)
+    validation_generator = ImageDataGenerator(
+        rescale=1.0 / 255
+    )  # except for rescaling, no augmentations are needed for validation and testing generators
     test_generator = ImageDataGenerator(rescale=1.0 / 255)
     # visualize image augmentations
-    # visualize_augmentations(train_generator, df)
+    visualize_augmentations(train_generator, df)
 
     train_generator = train_generator.flow_from_dataframe(
         dataframe=train,
-        x_col="image_location",
-        y_col="price",
-        class_mode="raw",
+        x_col="image_location",  # this is where your image data is stored
+        y_col="price",  # this is your target feature
+        class_mode="raw",  # use "raw" for regressions
         target_size=(224, 224),
         batch_size=128,
     )
@@ -138,49 +178,51 @@ def create_generators(
 
 
 def get_callbacks(model_name: str) -> List[Union[TensorBoard, EarlyStopping, ModelCheckpoint]]:
-    """[summary]
+    """Accepts the model name as a string and returns multiple callbacks for training the keras model.
 
     Parameters
     ----------
     model_name : str
-        [description]
+        The name of the model as a string.
 
     Returns
     -------
     List[Union[TensorBoard, EarlyStopping, ModelCheckpoint]]
-        [description]
+        A list of multiple keras callbacks.
     """
-    logdir = "logs/scalars/" + model_name + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    logdir = (
+        "logs/scalars/" + model_name + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    )  # create a folder for each model.
     tensorboard_callback = TensorBoard(log_dir=logdir)
+    # use tensorboard --logdir logs/scalars in your command line to startup tensorboard with the correct logs
 
     early_stopping_callback = EarlyStopping(
         monitor="val_mean_absolute_percentage_error",
-        min_delta=1,
-        patience=10,
+        min_delta=1,  # model should improve by at least 1%
+        patience=10,  # amount of epochs  with improvements worse than 1% until the model stops
         verbose=2,
         mode="min",
-        baseline=None,
-        restore_best_weights=True,
+        restore_best_weights=True,  # restore the best model with the lowest validation error
     )
 
     model_checkpoint_callback = ModelCheckpoint(
         "./data/models/" + model_name,
         monitor="val_mean_absolute_percentage_error",
         verbose=0,
-        save_best_only=True,
+        save_best_only=True,  # save the best model
         mode="min",
-        save_freq="epoch",
+        save_freq="epoch",  # save every epoch
     )  # saving eff_net takes quite a bit of time
-    return [tensorboard_callback, early_stopping_callback]  # , model_checkpoint_callback
+    return [tensorboard_callback, early_stopping_callback, model_checkpoint_callback]
 
 
 def small_cnn() -> Sequential:
-    """[summary]
+    """A very small custom convolutional neural network with image input dimensions of 224x224x3.
 
     Returns
     -------
     Sequential
-        [description]
+        The keras Sequential model.
     """
     model = models.Sequential()
     model.add(layers.Conv2D(32, (3, 3), activation="relu", input_shape=(224, 224, 3)))
@@ -203,23 +245,30 @@ def run_model(
     train_generator: Iterator,
     validation_generator: Iterator,
     test_generator: Iterator,
-) -> Dict:
-    """[summary]
+) -> History:
+    """This function runs a keras model with the Ranger optimizer and multiple callbacks. The model is evaluated within
+    training through the validation generator and afterwards one final time on the test generator.
 
     Parameters
     ----------
     model_name : str
-        [description]
+        The name of the model as a string.
     model_function : Model
-        [description]
+        Keras model function like small_cnn()  or adapt_efficient_net().
     lr : float
-        [description]
+        Learning rate.
     train_generator : Iterator
-        [description]
+        keras ImageDataGenerators for the training data.
     validation_generator : Iterator
-        [description]
+        keras ImageDataGenerators for the validation data.
     test_generator : Iterator
-        [description]
+        keras ImageDataGenerators for the test data.
+
+    Returns
+    -------
+    History
+        The history of the keras model as a History object. To access it as a Dict, use history.history. For an example
+        see plot_results().
     """
 
     callbacks = get_callbacks(model_name)
@@ -246,12 +295,22 @@ def run_model(
         test_generator,
         callbacks=callbacks,
     )
-    return history
+    return history  # type: ignore
 
 
 def adapt_efficient_net() -> Model:
-    inputs = layers.Input(shape=(224, 224, 3))
+    """This code uses adapts the most up-to-date version of EfficientNet with NoisyStudent weights to a regression
+    problem. Most of this code is adapted from the official keras documentation.
 
+    Returns
+    -------
+    Model
+        The keras model.
+    """
+    inputs = layers.Input(
+        shape=(224, 224, 3)
+    )  # input shapes of the images should always be 224x224x3 with EfficientNetB1
+    # use the downloaded and converted newest EfficientNet wheights
     model = EfficientNetB0(include_top=False, input_tensor=inputs, weights="efficientnetb0_notop.h5")
     # Freeze the pretrained weights
     model.trainable = False
@@ -269,8 +328,21 @@ def adapt_efficient_net() -> Model:
     return model
 
 
-def plot_results(model_history_small_cnn, model_history_eff_net, mean_baseline):
+def plot_results(model_history_small_cnn: History, model_history_eff_net: History, mean_baseline: float):
+    """This function uses seaborn with matplotlib to plot the trainig and validation losses of both input models in an
+    sns.relplot(). The mean baseline is plotted as a horizontal red dotted line.
 
+    Parameters
+    ----------
+    model_history_small_cnn : History
+        keras History object of the model.fit() method.
+    model_history_eff_net : History
+        keras History object of the model.fit() method.
+    mean_baseline : float
+        Result of the get_mean_baseline() function.
+    """
+
+    # create a dictionary for each model history and loss type
     dict1 = {
         "MAPE": model_history_small_cnn.history["mean_absolute_percentage_error"],
         "type": "training",
@@ -291,18 +363,21 @@ def plot_results(model_history_small_cnn, model_history_eff_net, mean_baseline):
         "type": "validation",
         "model": "eff_net",
     }
-    history_data = [dict1, dict2, dict3, dict4]
+
+    # convert the dicts to pd.Series and concat them to a pd.DataFrame in the long format
     s1 = pd.DataFrame(dict1)
     s2 = pd.DataFrame(dict2)
     s3 = pd.DataFrame(dict3)
     s4 = pd.DataFrame(dict4)
     df = pd.concat([s1, s2, s3, s4], axis=0).reset_index()
     grid = sns.relplot(data=df, x=df["index"], y="MAPE", hue="model", col="type", kind="line", legend=False)
-    grid.set(ylim=(20, 100))
+    grid.set(ylim=(20, 100))  # set the y-axis limit
     for ax in grid.axes.flat:
-        ax.axhline(y=mean_baseline, color="lightcoral", linestyle="dashed")
+        ax.axhline(
+            y=mean_baseline, color="lightcoral", linestyle="dashed"
+        )  # add a mean baseline horizontal bar to each plot
         ax.set(xlabel="Epoch")
-    labels = ["small_cnn", "eff_net", "mean_baseline"]
+    labels = ["small_cnn", "eff_net", "mean_baseline"]  # custom labels for the plot
 
     plt.legend(labels=labels)
     plt.savefig("training_validation.png")
@@ -310,11 +385,14 @@ def plot_results(model_history_small_cnn, model_history_eff_net, mean_baseline):
 
 
 def run():
+    """Run all the code of this file."""
 
     df = pd.read_pickle("./data/df.pkl")
-    df["image_location"] = "./data/processed_images/" + df["zpid"] + ".png"
-    # df = df.iloc[0:2000]
-    train, val, test = split_data(df)
+    df["image_location"] = (
+        "./data/processed_images/" + df["zpid"] + ".png"
+    )  # add the correct path for the image locations.
+    # df = df.iloc[0:1000] # uncomment this if you want to check if your code works without long waiting times
+    train, val, test = split_data(df)  # split your data
     mean_baseline = get_mean_baseline(train, val)
     train_generator, validation_generator, test_generator = create_generators(df, train, val, test)
 
@@ -394,9 +472,6 @@ Epoch 7/100
 # testing error
 9/9 [==============================] - 6s 635ms/step - loss: 183612.8750 - mean_absolute_error: 185082.6719 - mean_absolute_percentage_error: 23.9706
 """
-
-# TODO: write comments and docstrings
-
 
 if __name__ == "__main__":
     run()
