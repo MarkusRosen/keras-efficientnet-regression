@@ -309,7 +309,7 @@ def adapt_efficient_net() -> Model:
     """
     inputs = layers.Input(
         shape=(224, 224, 3)
-    )  # input shapes of the images should always be 224x224x3 with EfficientNetB1
+    )  # input shapes of the images should always be 224x224x3 with EfficientNetB0
     # use the downloaded and converted newest EfficientNet wheights
     model = EfficientNetB0(include_top=False, input_tensor=inputs, weights="efficientnetb0_notop.h5")
     # Freeze the pretrained weights
