@@ -398,7 +398,7 @@ def run(small_sample=False):
         "./data/processed_images/" + df["zpid"] + ".png"
     )  # add the correct path for the image locations.
     if small_sample == True:
-        df = df.iloc[0:1000]  # uncomment this if you want to check if your code works without long waiting times
+        df = df.iloc[0:1000]  # set small_sampe to True if you want to check if your code works without long waiting
     train, val, test = split_data(df)  # split your data
     mean_baseline = get_mean_baseline(train, val)
     train_generator, validation_generator, test_generator = create_generators(
