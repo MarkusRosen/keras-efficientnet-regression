@@ -1,4 +1,4 @@
-from typing import Iterator, List, Union, Tuple
+from typing import Iterator, List, Union, Tuple, Any
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -109,7 +109,7 @@ def split_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFra
 
 
 def create_generators(
-    df: pd.DataFrame, train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame
+    df: pd.DataFrame, train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame, plot_augmentations: Any
 ) -> Tuple[Iterator, Iterator, Iterator]:
     """Accepts four Pandas DataFrames: all your data, the training, validation and test DataFrames. Creates and returns
     keras ImageDataGenerators. Within this function you can also visualize the augmentations of the ImageDataGenerators.
@@ -141,13 +141,13 @@ def create_generators(
         horizontal_flip=True,
         validation_split=0.2,
     )  # create an ImageDataGenerator with multiple image augmentations
-
     validation_generator = ImageDataGenerator(
         rescale=1.0 / 255
     )  # except for rescaling, no augmentations are needed for validation and testing generators
     test_generator = ImageDataGenerator(rescale=1.0 / 255)
     # visualize image augmentations
-    visualize_augmentations(train_generator, df)
+    if plot_augmentations == True:
+        visualize_augmentations(train_generator, df)
 
     train_generator = train_generator.flow_from_dataframe(
         dataframe=train,
@@ -394,7 +394,9 @@ def run():
     # df = df.iloc[0:1000] # uncomment this if you want to check if your code works without long waiting times
     train, val, test = split_data(df)  # split your data
     mean_baseline = get_mean_baseline(train, val)
-    train_generator, validation_generator, test_generator = create_generators(df, train, val, test)
+    train_generator, validation_generator, test_generator = create_generators(
+        df=df, train=train, val=val, test=test, plot_augmentations=True
+    )
 
     small_cnn_history = run_model(
         model_name="small_cnn",
