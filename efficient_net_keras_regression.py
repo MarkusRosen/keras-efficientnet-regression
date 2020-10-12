@@ -384,14 +384,21 @@ def plot_results(model_history_small_cnn: History, model_history_eff_net: Histor
     plt.show()
 
 
-def run():
-    """Run all the code of this file."""
+def run(small_sample=False):
+    """Run all the code of this file.
+
+    Parameters
+    ----------
+    small_sample : bool, optional
+        If you just want to check if the code is working, set small_sample to True, by default False
+    """
 
     df = pd.read_pickle("./data/df.pkl")
     df["image_location"] = (
         "./data/processed_images/" + df["zpid"] + ".png"
     )  # add the correct path for the image locations.
-    # df = df.iloc[0:1000] # uncomment this if you want to check if your code works without long waiting times
+    if small_sample == True:
+        df = df.iloc[0:1000]  # uncomment this if you want to check if your code works without long waiting times
     train, val, test = split_data(df)  # split your data
     mean_baseline = get_mean_baseline(train, val)
     train_generator, validation_generator, test_generator = create_generators(
@@ -476,4 +483,4 @@ Epoch 7/100
 """
 
 if __name__ == "__main__":
-    run()
+    run(small_sample=False)
