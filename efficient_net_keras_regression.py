@@ -53,7 +53,7 @@ def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame
 
 
 def get_mean_baseline(train: pd.DataFrame, val: pd.DataFrame) -> float:
-    """Calculates the mean MAE and MAPE baselines by taking the mean values of the training data as predictioni for the
+    """Calculates the mean MAE and MAPE baselines by taking the mean values of the training data as prediction for the
     validation target feature.
 
     Parameters
@@ -155,7 +155,7 @@ def create_generators(
         y_col="price",  # this is your target feature
         class_mode="raw",  # use "raw" for regressions
         target_size=(224, 224),
-        batch_size=128,
+        batch_size=128,  # increase or decrease to fit your GPU
     )
 
     validation_generator = validation_generator.flow_from_dataframe(
@@ -288,7 +288,7 @@ def run_model(
         epochs=100,
         validation_data=validation_generator,
         callbacks=callbacks,
-        workers=6,
+        workers=6,  # adjust this according to the number of CPU cores of your machine
     )
 
     model.evaluate(
