@@ -425,62 +425,6 @@ def run(small_sample=False):
 
     plot_results(small_cnn_history, eff_net_history, mean_baseline)
 
-    # wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/noisystudent/noisy_student_efficientnet-b0.tar.gz
-    # tar -xf noisy_student_efficientnet-b0.tar.gz
-    # python efficientnet_weight_update_util.py --model b0 --notop --ckpt noisy_student_efficientnet-b0/model.ckpt --o efficientnetb0_notop.h5
-    # tensorboard --logdir logs/scalars
-
-    # mean baselines 188311.890625 28.71662139892578
-    # 17m30s
-    # 3m40s
-    """ small cnn
-    Epoch 15/100
-60/60 [==============================] - 48s 805ms/step - loss: 185176.3281 - mean_absolute_error: 185115.5625 - mean_absolute_percentage_error: 25.4920 - val_loss: 187887.1094 - val_mean_absolute_error: 185792.2969 - val_mean_absolute_percentage_error: 28.6558
-Epoch 16/100
-60/60 [==============================] - 48s 792ms/step - loss: 184898.2656 - mean_absolute_error: 184811.8281 - mean_absolute_percentage_error: 25.4640 - val_loss: 184086.2188 - val_mean_absolute_error: 183725.7188 - val_mean_absolute_percentage_error: 28.2318
-Epoch 17/100
-60/60 [==============================] - 48s 805ms/step - loss: 184179.1094 - mean_absolute_error: 183871.7031 - mean_absolute_percentage_error: 25.3496 - val_loss: 186079.0469 - val_mean_absolute_error: 185818.1875 - val_mean_absolute_percentage_error: 28.3344
-Epoch 18/100
-60/60 [==============================] - 48s 803ms/step - loss: 184758.2344 - mean_absolute_error: 184760.5469 - mean_absolute_percentage_error: 25.4764 - val_loss: 184336.3438 - val_mean_absolute_error: 180909.9375 - val_mean_absolute_percentage_error: 27.1706
-Epoch 19/100
-60/60 [==============================] - 48s 793ms/step - loss: 185315.5625 - mean_absolute_error: 185343.5938 - mean_absolute_percentage_error: 25.5804 - val_loss: 184969.5781 - val_mean_absolute_error: 185502.6406 - val_mean_absolute_percentage_error: 27.9391
-Epoch 20/100
-60/60 [==============================] - 47s 789ms/step - loss: 184386.4531 - mean_absolute_error: 184337.3125 - mean_absolute_percentage_error: 25.4744 - val_loss: 183334.1406 - val_mean_absolute_error: 180248.4844 - val_mean_absolute_percentage_error: 27.1078
-Epoch 21/100
-60/60 [==============================] - 47s 782ms/step - loss: 184395.2188 - mean_absolute_error: 184380.7969 - mean_absolute_percentage_error: 25.4457 - val_loss: 187023.0625 - val_mean_absolute_error: 186611.1406 - val_mean_absolute_percentage_error: 28.2821
-Epoch 22/100
-60/60 [==============================] - 48s 807ms/step - loss: 183725.0000 - mean_absolute_error: 183510.2031 - mean_absolute_percentage_error: 25.3401 - val_loss: 182207.5938 - val_mean_absolute_error: 181847.2812 - val_mean_absolute_percentage_error: 28.3565
-Epoch 23/100
-60/60 [==============================] - 50s 825ms/step - loss: 183497.7656 - mean_absolute_error: 183333.9844 - mean_absolute_percentage_error: 25.3179 - val_loss: 183527.0938 - val_mean_absolute_error: 190079.0781 - val_mean_absolute_percentage_error: 27.6561
-Epoch 24/100
-60/60 [==============================] - 51s 847ms/step - loss: 183842.5781 - mean_absolute_error: 183972.0938 - mean_absolute_percentage_error: 25.3546 - val_loss: 185380.4062 - val_mean_absolute_error: 183492.7188 - val_mean_absolute_percentage_error: 28.2040
-Epoch 25/100
-
-# test error
-9/9 [==============================] - 5s 561ms/step - loss: 187197.9062 - mean_absolute_error: 186815.7500 - mean_absolute_percentage_error: 27.8397
-
-"""
-
-
-"""eff_net
- 2/60 [>.............................] - ETA: 3:16 - loss: 710118.0625 - mean_absolute_error: 715287.6250 - mean_absolute_percentage_error: 99.9999WARNING:tensorflow:Callbacks method `on_train_batch_end` is slow compared to the batch time (batch time: 1.7491s vs `on_train_batch_end` time: 5.0077s). Check your callbacks.
-60/60 [==============================] - 62s 1s/step - loss: 705718.3125 - mean_absolute_error: 705919.2500 - mean_absolute_percentage_error: 99.7793 - val_loss: 697795.8125 - val_mean_absolute_error: 689881.5000 - val_mean_absolute_percentage_error: 99.0928
-Epoch 2/100
-60/60 [==============================] - 52s 873ms/step - loss: 675638.8750 - mean_absolute_error: 675420.8750 - mean_absolute_percentage_error: 95.0084 - val_loss: 633470.1875 - val_mean_absolute_error: 626153.2500 - val_mean_absolute_percentage_error: 88.8780
-Epoch 3/100
-60/60 [==============================] - 62s 1s/step - loss: 541324.6250 - mean_absolute_error: 541999.3750 - mean_absolute_percentage_error: 73.9094 - val_loss: 426912.6562 - val_mean_absolute_error: 431120.6250 - val_mean_absolute_percentage_error: 56.7776
-Epoch 4/100
-60/60 [==============================] - 55s 921ms/step - loss: 273624.1875 - mean_absolute_error: 274123.1562 - mean_absolute_percentage_error: 34.1725 - val_loss: 183415.8906 - val_mean_absolute_error: 183893.3594 - val_mean_absolute_percentage_error: 23.9141
-Epoch 5/100
-60/60 [==============================] - 55s 918ms/step - loss: 185995.6406 - mean_absolute_error: 186042.1094 - mean_absolute_percentage_error: 25.4941 - val_loss: 180898.1094 - val_mean_absolute_error: 180924.5312 - val_mean_absolute_percentage_error: 25.4735
-Epoch 6/100
-60/60 [==============================] - 57s 948ms/step - loss: 185689.1875 - mean_absolute_error: 185715.0312 - mean_absolute_percentage_error: 25.5540 - val_loss: 180900.4062 - val_mean_absolute_error: 175182.1875 - val_mean_absolute_percentage_error: 24.2947
-Epoch 7/100
-60/60 [==============================] - 56s 940ms/step - loss: 185837.9375 - mean_absolute_error: 185846.5156 - mean_absolute_percentage_error: 25.4831 - val_loss: 180961.9062 - val_mean_absolute_error: 183433.9375 - val_mean_absolute_percentage_error: 24.7834
-
-# testing error
-9/9 [==============================] - 6s 635ms/step - loss: 183612.8750 - mean_absolute_error: 185082.6719 - mean_absolute_percentage_error: 23.9706
-"""
 
 if __name__ == "__main__":
     run(small_sample=False)
