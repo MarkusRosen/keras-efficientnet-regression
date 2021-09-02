@@ -16,6 +16,12 @@ from tensorflow.keras.applications import EfficientNetB0
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.callbacks import History
 
+# the next 3 lines of code are for my machine and setup due to https://github.com/tensorflow/tensorflow/issues/43174
+import tensorflow as tf
+
+physical_devices = tf.config.list_physical_devices("GPU")
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
 
 def visualize_augmentations(data_generator: ImageDataGenerator, df: pd.DataFrame):
     """Visualizes the keras augmentations with matplotlib in 3x3 grid. This function is part of create_generators() and
@@ -155,24 +161,14 @@ def create_generators(
         y_col="price",  # this is your target feature
         class_mode="raw",  # use "raw" for regressions
         target_size=(224, 224),
-        batch_size=128,  # increase or decrease to fit your GPU
+        batch_size=32,  # increase or decrease to fit your GPU
     )
 
     validation_generator = validation_generator.flow_from_dataframe(
-        dataframe=val,
-        x_col="image_location",
-        y_col="price",
-        class_mode="raw",
-        target_size=(224, 224),
-        batch_size=128,
+        dataframe=val, x_col="image_location", y_col="price", class_mode="raw", target_size=(224, 224), batch_size=128,
     )
     test_generator = test_generator.flow_from_dataframe(
-        dataframe=test,
-        x_col="image_location",
-        y_col="price",
-        class_mode="raw",
-        target_size=(224, 224),
-        batch_size=128,
+        dataframe=test, x_col="image_location", y_col="price", class_mode="raw", target_size=(224, 224), batch_size=128,
     )
     return train_generator, validation_generator, test_generator
 
@@ -206,7 +202,7 @@ def get_callbacks(model_name: str) -> List[Union[TensorBoard, EarlyStopping, Mod
     )
 
     model_checkpoint_callback = ModelCheckpoint(
-        "./data/models/" + model_name,
+        "./data/models/" + model_name + ".h5",
         monitor="val_mean_absolute_percentage_error",
         verbose=0,
         save_best_only=True,  # save the best model
@@ -274,7 +270,7 @@ def run_model(
     callbacks = get_callbacks(model_name)
     model = model_function
     model.summary()
-    plot_model(model, to_file=model_name + ".jpg", show_shapes=True)
+    plot_model(model, to_file=model_name + ".png", show_shapes=True)
 
     radam = tfa.optimizers.RectifiedAdam(learning_rate=lr)
     ranger = tfa.optimizers.Lookahead(radam, sync_period=6, slow_step_size=0.5)
@@ -292,8 +288,7 @@ def run_model(
     )
 
     model.evaluate(
-        test_generator,
-        callbacks=callbacks,
+        test_generator, callbacks=callbacks,
     )
     return history  # type: ignore
 
